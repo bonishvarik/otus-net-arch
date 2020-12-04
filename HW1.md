@@ -122,7 +122,6 @@ interfaces {
        }
     }
 }
-}
 </code></pre>
 </details>
 
@@ -135,28 +134,24 @@ interface loopback0
 interface Ethernet1/1
   description to_Leaf1
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.12.6/31
   no shutdown
 !
 interface Ethernet1/2
   description to_Leaf2
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.12.8/31
   no shutdown
 !
 interface Ethernet1/3
   description to_Leaf3
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.12.10/31
   no shutdown
 !
 interface Ethernet1/4
   description to_Core
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.10.3/31
   no shutdown
 !
@@ -170,17 +165,117 @@ interface loopback0
   ip address 10.0.250.3/32
 !
 interface Ethernet1/1
+  description to_Leaf4
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.12.12/31
   no shutdown
 !
-
 interface Ethernet1/4
   description to_Core
   no switchport
-  mac-address 000c.2984.fce0
   ip address 10.0.10.5/31
   no shutdown
+</code></pre>
+</details>
+
+<details>
+  <summary>Leaf1</summary>
+<pre><code>
+interfaces {
+    xe-0/0/2 {
+        unit 0 {
+            description to_Leaf2;
+            family inet {
+                address 10.0.13.0/31;
+            }
+        }
+    }                                   
+    xe-0/0/3 {
+        unit 0 {
+            description to_Spine1;
+            family inet {
+                address 10.0.12.1/31;
+            }
+        }
+    }
+    xe-0/0/4 {
+        unit 0 {
+            description to_Spine2;
+            family inet {
+                address 10.0.12.7/31;
+            }
+        }
+    }
+    lo0 {
+        unit 0 {
+            family inet {
+                address 10.0.250.128/32;
+            }
+       }
+    }
+}
+</code></pre>
+</details>
+
+<details>
+  <summary>Leaf2</summary>
+<pre><code>
+interface loopback0
+  ip address 10.0.250.129/32
+!
+interface Ethernet1/2
+  description to_Leaf1
+  no switchport
+  ip address 10.0.13.1/31
+  no shutdown
+!
+interface Ethernet1/3
+  description to_Spine1
+  no switchport
+  ip address 10.0.12.3/31
+  no shutdown
+!
+interface Ethernet1/4
+  description to_Spine2
+  no switchport
+  ip address 10.0.12.9/31
+  no shutdown
+!
+</code></pre>
+</details>
+
+<details>
+  <summary>Leaf3</summary>
+<pre><code>
+interface loopback0
+  ip address 10.0.250.130/32
+!
+interface Ethernet1/3
+  description to_Spine1
+  no switchport
+  ip address 10.0.12.5/31
+  no shutdown
+!
+interface Ethernet1/4
+  description to_Spine2
+  no switchport
+  ip address 10.0.12.11/31
+  no shutdown
+!
+</code></pre>
+</details>
+
+<details>
+  <summary>Leaf4</summary>
+<pre><code>
+interface loopback0
+  ip address 10.0.250.131/32
+!
+interface Ethernet1/4
+  description to_Spine3
+  no switchport
+  ip address 10.0.12.13/31
+  no shutdown
+!
 </code></pre>
 </details>
