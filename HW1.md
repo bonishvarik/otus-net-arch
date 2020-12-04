@@ -55,3 +55,132 @@
 | Leaf3 | e1/3 | 10.0.12.5/31 | to_Spine1 |
 | Leaf3 | e1/4 | 10.0.12.11/31 | to_Spine2 |
 | Leaf4 | e1/4 | 10.0.12.13/31 | to_Spine3 |
+
+Конфигурация оборудования
+<details>
+  <summary>Core</summary>
+<pre><code>
+interface Loopback0
+ ip address 10.0.250.127 255.255.255.255
+!
+interface Ethernet0/0
+ description to_Spine1
+ ip address 10.0.10.0 255.255.255.254
+!
+interface Ethernet0/1
+ description to_Spine2
+ ip address 10.0.10.2 255.255.255.254
+!
+interface Ethernet0/2
+ description to_Spine3
+ ip address 10.0.10.4 255.255.255.254
+!
+</code></pre>
+</details>
+
+<details>
+  <summary>Spine1</summary>
+<pre><code>
+interfaces {
+    xe-0/0/1 {
+        unit 0 {
+            description to_Spine1;
+            family inet {
+                address 10.0.12.0/31;
+            }
+        }
+    }
+    xe-0/0/2 {
+        unit 0 {
+            description to_Spine2;
+            family inet {
+                address 10.0.12.2/31;
+            }
+        }
+    }                                   
+    xe-0/0/3 {
+        unit 0 {
+            description to_Spine3;
+            family inet {
+                address 10.0.12.4/31;
+            }
+        }
+    }
+    xe-0/0/4 {
+        unit 0 {
+            description to_Core;
+            family inet {
+                address 10.0.10.1/31;
+            }
+        }
+    }
+    lo0 {
+        unit 0 {
+            family inet {
+                address 10.0.250.1/32;
+            }
+       }
+    }
+}
+}
+</code></pre>
+</details>
+
+<details>
+  <summary>Spine2</summary>
+<pre><code>
+interface loopback0
+  ip address 10.0.250.2/32
+!
+interface Ethernet1/1
+  description to_Leaf1
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.12.6/31
+  no shutdown
+!
+interface Ethernet1/2
+  description to_Leaf2
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.12.8/31
+  no shutdown
+!
+interface Ethernet1/3
+  description to_Leaf3
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.12.10/31
+  no shutdown
+!
+interface Ethernet1/4
+  description to_Core
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.10.3/31
+  no shutdown
+!
+</code></pre>
+</details>
+
+<details>
+  <summary>Spine3</summary>
+<pre><code>
+interface loopback0
+  ip address 10.0.250.3/32
+!
+interface Ethernet1/1
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.12.12/31
+  no shutdown
+!
+
+interface Ethernet1/4
+  description to_Core
+  no switchport
+  mac-address 000c.2984.fce0
+  ip address 10.0.10.5/31
+  no shutdown
+</code></pre>
+</details>
