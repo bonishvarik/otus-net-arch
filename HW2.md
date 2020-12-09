@@ -434,7 +434,7 @@ Address          Interface              State     ID               Pri  Dead
 </code></pre>
 </details>
 
-Проверим связность Lo0 Leaf1 и Lo0 Leaf4:
+Проверим связность Loobback-адресов Leaf1 и Leaf4:
 <pre><code>
 root@Leaf1> ping 10.0.250.131 source 10.0.250.128 rapid 
 PING 10.0.250.131 (10.0.250.131): 56 data bytes
@@ -443,4 +443,4 @@ PING 10.0.250.131 (10.0.250.131): 56 data bytes
 5 packets transmitted, 5 packets received, 0% packet loss
 round-trip min/avg/max/stddev = 27.461/30.571/41.500/5.469 ms
 </code></pre>
-На этом задание выполнено: все OSPF-соседства успешно установлены.
+На этом задание выполнено: все OSPF-соседства успешно установлены и маршрутизаторы успешно "видят" друг друга.
