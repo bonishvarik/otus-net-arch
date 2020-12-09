@@ -53,7 +53,6 @@
   <summary>Core</summary>
 <pre><code>
 service password-encryption
-
 router ospf 1
  router-id 10.0.250.127
  passive-interface default
@@ -142,7 +141,7 @@ feature ospf
 router ospf 1
   router-id 10.0.250.2
   passive-interface default
-
+!
 interface Ethernet1/1
   description to_Leaf1
   no switchport
@@ -153,7 +152,7 @@ interface Ethernet1/1
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/2
   description to_Leaf2
   no switchport
@@ -164,7 +163,7 @@ interface Ethernet1/2
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/3
   description to_Leaf3
   no switchport
@@ -175,7 +174,7 @@ interface Ethernet1/3
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Core
   no switchport
@@ -193,11 +192,10 @@ interface Ethernet1/4
   <summary>Spine3</summary>
 <pre><code>
 feature ospf 
-
 router ospf 1
   router-id 10.0.250.3
   passive-interface default
-  
+!
 interface loopback0
   ip address 10.0.250.3/32
   ip router ospf 1 area 0.0.0.0
@@ -212,7 +210,7 @@ interface Ethernet1/1
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.2
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Core
   no switchport
@@ -266,11 +264,10 @@ protocols {
   <summary>Leaf2</summary>
 <pre><code>
 feature ospf 
-
 router ospf 1
   router-id 10.0.250.129
   passive-interface default
-
+!
 interface Ethernet1/2
   description to_Leaf1
   no switchport
@@ -282,7 +279,7 @@ interface Ethernet1/2
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/3
   description to_Spine1
   no switchport
@@ -294,7 +291,7 @@ interface Ethernet1/3
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Spine2
   no switchport
@@ -313,15 +310,14 @@ interface Ethernet1/4
   <summary>Leaf3</summary>
 <pre><code>
 feature ospf 
-
 router ospf 1
   router-id 10.0.250.130
   passive-interface default
-  
+!
 interface loopback0
   ip address 10.0.250.130/32
   ip router ospf 1 area 0.0.0.0
-
+!
 interface Ethernet1/3
   description to_Spine1
   no switchport
@@ -332,7 +328,7 @@ interface Ethernet1/3
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Spine2
   no switchport
@@ -344,7 +340,6 @@ interface Ethernet1/4
   no ip ospf passive-interface
   ip router ospf 1 area 0.0.0.1
   no shutdown
-
 </code></pre>
 </details>
 
@@ -352,15 +347,14 @@ interface Ethernet1/4
   <summary>Leaf4</summary>
 <pre><code>
 feature ospf 
-
 router ospf 1
   router-id 10.0.250.131
   passive-interface default
-
+!
 interface loopback0
   ip address 10.0.250.131/32
   ip router ospf 1 area 0.0.0.0
-
+!
 interface Ethernet1/4
   description to_Spine3
   no switchport
