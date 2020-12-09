@@ -377,9 +377,9 @@ interface Ethernet1/4
 </details>
 
 Убедимся, что на Core видны Loopback-адреса всех устройств в сети:
-<details>
-  <summary>Core#sh ip route ospf | include /32</summary>
+
 <pre><code>
+Core#sh ip route ospf | include /32
 O        10.0.250.1/32 [110/10] via 10.0.10.1, 00:26:14, Ethernet0/0
 O        10.0.250.2/32 [110/11] via 10.0.10.3, 00:24:03, Ethernet0/1
 O        10.0.250.3/32 [110/11] via 10.0.10.5, 00:22:50, Ethernet0/2
@@ -390,9 +390,8 @@ O IA     10.0.250.131/32 [110/51] via 10.0.10.5, 00:01:11, Ethernet0/2
 </code></pre>
 </details>
 Далее проверим, что все Spine установили ospf-соседства с Leaf:
-<details>
-  <summary>root@Spine1> show ospf neighbor </summary>
 <pre><code>
+root@Spine1> show ospf neighbor 
 Address          Interface              State     ID               Pri  Dead
 10.0.10.0        xe-0/0/4.0             Full      10.0.250.127       1    37
 10.0.12.1        xe-0/0/1.0             Full      10.0.250.128     128    38
@@ -401,9 +400,9 @@ Address          Interface              State     ID               Pri  Dead
 </code></pre>
 </details>
 
-<details>
-  <summary>Spine2# sh ip ospf neighbors</summary>
+
 <pre><code>
+Spine2# sh ip ospf neighbors
  OSPF Process ID 1 VRF default
  Total number of neighbors: 4
  Neighbor ID     Pri State            Up Time  Address         Interface
@@ -412,27 +411,36 @@ Address          Interface              State     ID               Pri  Dead
  10.0.250.130      1 FULL/ -          00:19:20 10.0.12.11      Eth1/3 
  10.0.250.127      1 FULL/ -          00:28:07 10.0.10.2       Eth1/4 
 </code></pre>
-</details>
 
-<details>
-  <summary>Spine3# sh ip ospf neighbors </summary>
+
+
 <pre><code>
+Spine3# sh ip ospf neighbors 
  OSPF Process ID 1 VRF default
  Total number of neighbors: 2
  Neighbor ID     Pri State            Up Time  Address         Interface
  10.0.250.131      1 FULL/ -          00:17:11 10.0.12.13      Eth1/1 
  10.0.250.127      1 FULL/ -          00:27:19 10.0.10.4       Eth1/4 
 </code></pre>
-</details>
 
 Последним этапом проверим установление OSPF-сессии между Leaf1 и Leaf2:
- 
-<details>
-  <summary>root@Leaf1> show ospf neighbor</summary>
+
 <pre><code>
+root@Leaf1> show ospf neighbor
 Address          Interface              State     ID               Pri  Dead
 10.0.13.1        xe-0/0/2.0             Full      10.0.250.129       1    32
 10.0.12.0        xe-0/0/3.0             Full      10.0.250.1       128    33
 10.0.12.6        xe-0/0/4.0             Full      10.0.250.2         1    32
 </code></pre>
 </details>
+
+Проверим связность Lo0 Leaf1 и Lo0 Leaf4:
+<pre><code>
+root@Leaf1> ping 10.0.250.131 source 10.0.250.128 rapid 
+PING 10.0.250.131 (10.0.250.131): 56 data bytes
+!!!!!
+--- 10.0.250.131 ping statistics ---
+5 packets transmitted, 5 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 27.461/30.571/41.500/5.469 ms
+</code></pre>
+На этом задание выполнено: все OSPF-соседства успешно установлены.
