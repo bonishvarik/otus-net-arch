@@ -149,7 +149,7 @@ interface Ethernet1/2
   isis circuit-type level-1
   ip router isis 1
   no shutdown
-
+!
 interface Ethernet1/3
   description to_Leaf3
   no switchport
@@ -158,7 +158,7 @@ interface Ethernet1/3
   isis circuit-type level-1
   ip router isis 1
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Core
   no switchport
@@ -243,7 +243,7 @@ interface Ethernet1/2
   ip address 10.0.13.1/31
   ip router isis 1
   no shutdown
-
+!
 interface Ethernet1/3
   description to_Spine1
   no switchport
@@ -252,7 +252,7 @@ interface Ethernet1/3
   no isis hello-padding
   ip router isis 1
   no shutdown
-
+!
 interface Ethernet1/4
   description to_Spine2
   no switchport
@@ -378,7 +378,6 @@ xe-0/0/2.0            Leaf2          1  Up                   27  0:c:29:84:fc:e1
 xe-0/0/3.0            Spine1         1  Up                   25
 xe-0/0/4.0            Spine2         1  Up                    6  50:0:0:5:0:7
 </code></pre>
-</details>
 
 Проверим связность Loobback-адресов Leaf1 и Leaf4:
 <pre><code>
@@ -390,6 +389,3 @@ PING 10.0.250.131 (10.0.250.131): 56 data bytes
 round-trip min/avg/max/stddev = 19.502/52.918/171.545/59.372 ms
 </code></pre>
 На этом задание выполнено: все OSPF-соседства успешно установлены и маршрутизаторы успешно "видят" друг друга.
-
-
-P.S. В процессе выполнения задания столкнулся с необычным поведением при установлении ISIS-соседств IOL и NXOS, а также Junos и NXOS: в режиме point-to-point соседства никак не устанавливались - зависали в процессе Init и все. Проблему решил путем ухода от p2p на данных участках.  
