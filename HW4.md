@@ -157,6 +157,9 @@ protocols {
         export [ Lo0-2-bgp p2p-2-bgp ]; 
         group Core {
             type internal;
+            family inet {
+                unicast;
+            }
             authentication-key "$9$JEDkPz3901h9Aw24ojituOIyl8X7NVwleYg"; ## SECRET-DATA
             peer-as 65000;
             neighbor 10.0.10.0;
@@ -403,50 +406,69 @@ router bgp 65003
 Убедимся, что на Core видны Loopback-адреса всех устройств в сети:
 
 <pre><code>
-Core#show ip route isis | include /32
-i L2     10.0.250.1/32 [115/10] via 10.0.10.1, 00:00:58, Ethernet0/0
-i L2     10.0.250.2/32 [115/11] via 10.0.10.3, 00:00:58, Ethernet0/1
-i L2     10.0.250.3/32 [115/11] via 10.0.10.5, 00:00:58, Ethernet0/2
-i L2     10.0.250.128/32 [115/20] via 10.0.10.1, 00:00:58, Ethernet0/0
-i L2     10.0.250.129/32 [115/21] via 10.0.10.1, 00:00:58, Ethernet0/0
-i L2     10.0.250.130/32 [115/21] via 10.0.10.1, 00:00:58, Ethernet0/0
-i L2     10.0.250.131/32 [115/51] via 10.0.10.5, 00:00:58, Ethernet0/2
-</code></pre>
-</details>
-Далее проверим, что все Spine установили isis-соседства с Leaf:
-<pre><code>
-root@Spine1> show isis adjacency 
-Interface             System         L State        Hold (secs) SNPA
-xe-0/0/1.0            Leaf1          1  Up                   19
-xe-0/0/2.0            Leaf2          1  Up                   23  0:c:29:84:fc:e2
-xe-0/0/3.0            Leaf3          1  Up                    8  50:0:0:7:0:7
-xe-0/0/4.0            Core           2  Up                   24
+Core#sh ip route 10.0.250.0 255.255.255.0 longer-prefixes 
+
+B        10.0.250.1/32 [200/0] via 10.0.10.1, 01:58:05
+B        10.0.250.2/32 [200/0] via 10.0.10.3, 01:59:29
+B        10.0.250.3/32 [200/0] via 10.0.10.5, 01:58:45
+C        10.0.250.127/32 is directly connected, Loopback0
+B        10.0.250.128/32 [200/0] via 10.0.12.7, 01:41:45
+                         [200/0] via 10.0.12.1, 01:41:45
+B        10.0.250.129/32 [200/0] via 10.0.12.9, 01:46:08
+                         [200/0] via 10.0.12.3, 01:46:08
+B        10.0.250.130/32 [200/0] via 10.0.12.11, 01:41:30
+                         [200/0] via 10.0.12.5, 01:41:30
+B        10.0.250.131/32 [200/0] via 10.0.12.13, 01:41:20
 </code></pre>
 </details>
 
+Как видно выше, до Loopback-адресов Leaf1, Leaf2 и Leaf3 активны 2 маршрута - по одному через каждый Spine. 
+
+Далее проверим, что все Spine установили BGP-соседства с Leaf:
+<pre><code>
+root@Spine1> show bgp summary 
+Groups: 3 Peers: 4 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      28         16          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.10.0             65000        273        271       0       0     1:59:32 10/11/11/0           0/0/0/0
+10.0.12.1             65001        232        236       0       0     1:43:17 3/7/7/0              0/0/0/0
+10.0.12.3             65001        222        248       0       0     1:47:36 2/7/7/0              0/0/0/0
+10.0.12.5             65002        208        235       0       0     1:43:02 1/3/3/0              0/0/0/0
+</code></pre>
+</details>
+
 
 <pre><code>
-Spine2# show isis adjacency 
-IS-IS process: 1 VRF: default
-IS-IS adjacency database:
-Legend: '!': No AF level connectivity in given topology
-System ID       SNPA            Level  State  Hold Time  Interface
-Leaf1           0205.8671.6713  1      UP     00:00:22   Ethernet1/1
-Leaf2           N/A             1      UP     00:00:24   Ethernet1/2
-Leaf3           N/A             1      UP     00:00:25   Ethernet1/3
-Core            aabb.cc00.0110  2      UP     00:00:09   Ethernet1/4
+Spine2# sh ip bgp summary 
+BGP summary information for VRF default, address family IPv4 Unicast
+BGP router identifier 10.0.250.2, local AS number 65000
+BGP table version is 42, IPv4 Unicast config peers 4, capable peers 4
+19 network entries and 37 paths using 6408 bytes of memory
+BGP attribute entries [13/2028], BGP AS path entries [3/18]
+BGP community entries [0/0], BGP clusterlist entries [2/8]
+
+Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.0.10.2       4 65000     145     132       42    0    0 02:02:41 15        
+10.0.12.7       4 65001     232     217       42    0    0 01:43:26 7         
+10.0.12.9       4 65001     115     122       42    0    0 01:47:50 7         
+10.0.12.11      4 65002     112     116       42    0    0 01:43:11 3   
 </code></pre>
 
 
-
 <pre><code>
-Spine3# show isis adjacency 
-IS-IS process: 1 VRF: default
-IS-IS adjacency database:
-Legend: '!': No AF level connectivity in given topology
-System ID       SNPA            Level  State  Hold Time  Interface
-Leaf4           N/A             1      UP     00:00:31   Ethernet1/1
-Core            aabb.cc00.0120  2      UP     00:00:09   Ethernet1/4
+Spine3# sh ip bgp summary 
+BGP summary information for VRF default, address family IPv4 Unicast
+BGP router identifier 10.0.250.3, local AS number 65000
+BGP table version is 31, IPv4 Unicast config peers 2, capable peers 2
+19 network entries and 21 paths using 4360 bytes of memory
+BGP attribute entries [8/1248], BGP AS path entries [3/18]
+BGP community entries [0/0], BGP clusterlist entries [2/8]
+
+Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.0.10.4       4 65000     148     129       31    0    0 02:02:19 16        
+10.0.12.13      4 65003     110     117       31    0    0 01:43:25 2  
 </code></pre>
 
 Последним этапом проверим установление isis-сессии между Leaf1 и Leaf2:
@@ -466,6 +488,110 @@ PING 10.0.250.131 (10.0.250.131): 56 data bytes
 !!!!!
 --- 10.0.250.131 ping statistics ---
 5 packets transmitted, 5 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 19.502/52.918/171.545/59.372 ms
+round-trip min/avg/max/stddev = 20.056/79.004/291.592/106.410 ms
 </code></pre>
-На этом задание выполнено: все OSPF-соседства успешно установлены и маршрутизаторы успешно "видят" друг друга.
+
+Проверим таблицы маршрутизации на Leaf, чтобы убедиться в наличии нескольких маршрутов "наверх":
+
+<pre><code>
+root@Leaf1> show route 10.0.250.0/24 protocol bgp active-path 
+
+inet.0: 24 destinations, 59 routes (24 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.250.1/32      *[BGP/170] 01:46:42, localpref 100
+                      AS path: 65000 I, validation-state: unverified
+                    > to 10.0.12.0 via xe-0/0/3.0
+                      to 10.0.12.6 via xe-0/0/4.0
+10.0.250.2/32      *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
+                      AS path: 65000 ?, validation-state: unverified
+                      to 10.0.12.0 via xe-0/0/3.0
+                    > to 10.0.12.6 via xe-0/0/4.0
+10.0.250.3/32      *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
+                      AS path: 65000 ?, validation-state: unverified
+                      to 10.0.12.0 via xe-0/0/3.0
+                    > to 10.0.12.6 via xe-0/0/4.0
+10.0.250.127/32    *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
+                      AS path: 65000 ?, validation-state: unverified
+                      to 10.0.12.0 via xe-0/0/3.0
+                    > to 10.0.12.6 via xe-0/0/4.0
+10.0.250.129/32    *[BGP/170] 00:04:57, MED 0, localpref 100
+                      AS path: ?, validation-state: unverified
+                    > to 10.0.13.1 via xe-0/0/2.0
+10.0.250.130/32    *[BGP/170] 01:46:22, localpref 100, from 10.0.12.6
+                      AS path: 65000 65002 ?, validation-state: unverified
+                    > to 10.0.12.0 via xe-0/0/3.0
+                      to 10.0.12.6 via xe-0/0/4.0
+10.0.250.131/32    *[BGP/170] 01:46:13, localpref 100, from 10.0.12.6
+                      AS path: 65000 65003 ?, validation-state: unverified
+                    > to 10.0.12.0 via xe-0/0/3.0
+                      to 10.0.12.6 via xe-0/0/4.0
+</code></pre>
+
+На Leaf1 видно, что все префиксы имеют по 2 маршрута, кроме 10.0.250.129/32, посколько данный маршрут принимается от iBGP-соседства с Leaf2.
+
+Таблица маршрутизации Leaf2:
+<pre><code>
+Leaf2# show ip route 10.0.250.0/24 longer-prefixes bgp-65001 
+IP Route Table for VRF "default"
+'*' denotes best ucast next-hop
+'**' denotes best mcast next-hop
+'[x/y]' denotes [preference/metric]
+'%<string>' in via output denotes VRF <string>
+
+10.0.250.1/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.2/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.3/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.127/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.128/32, ubest/mbest: 1/0
+    *via 10.0.13.0, [200/0], 00:01:06, bgp-65001, internal, tag 65001
+10.0.250.130/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.131/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+</code></pre>
+
+И Leaf3: 
+<pre><code>
+Leaf3# show ip route 10.0.250.0/24 longer-prefixes bgp-65002 
+IP Route Table for VRF "default"
+'*' denotes best ucast next-hop
+'**' denotes best mcast next-hop
+'[x/y]' denotes [preference/metric]
+'%<string>' in via output denotes VRF <string>
+
+10.0.250.1/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.2/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.3/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.127/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.128/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 00:26:06, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 00:26:06, bgp-65002, external, tag 65000
+10.0.250.129/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.131/32, ubest/mbest: 2/0
+    *via 10.0.12.4, [20/0], 02:19:48, bgp-65002, external, tag 65000
+    *via 10.0.12.10, [20/0], 02:19:48, bgp-65002, external, tag 65000
+</code></pre>
+
+
+На этом задание выполнено: все BGP-соседства установлены и маршрутизаторы "видят" друг друга.
