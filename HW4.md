@@ -48,45 +48,97 @@
 | Leaf3 | e1/4 | 10.0.12.11/31 | to_Spine2 |
 | Leaf4 | e1/4 | 10.0.12.13/31 | to_Spine3 |
 
-Для установления соседств также настроим аутентификацию. Пароли для AS65000, AS65001, AS65002 и AS65003 будут otus_as65000, otus_as65001, otus_as65002 и otus_as65003, соответственно.
+Для настройки underlay BGP необходимо выполнить следующие условия: 
+- все BGP-соседства устанавливаются через адреса, указанные на физических интерфейсах
+- соседу анонсируются только connected-сети (loopback и p2p)
+- для установления соседства требуется аутентификация: otus_as65000, otus_as65001, otus_as65002 и otus_as65003 - для каждой AS
+- на всех роутерах активирован maximum-path 4
+- Core и три Spine находятся в одной AS, чтобы не устанавливать full-mesh соседств, Core настраивается в качестве route reflector
+- для leaf1 и leaf2 активируется allowas-in
+
+На всех маршрутизаторах Cisco создан route-map bgp-out, который матчит два prefix-list: p2p - содержит в себе point-to-point адреса; loopback - содержит в себе loopback-адрес устройства. 
+<pre><code>
+route-map bgp-out permit 10
+ match ip address prefix-list loopback p2p
+!
+ip prefix-list loopback seq 5 permit 10.0.250.127/32
+!
+ip prefix-list p2p seq 5 permit 10.0.10.0/24 le 31
+</code></pre>
+
+Для устройств Juniper политики выглядят следующим образом:
+<pre><code>
+policy-options {
+    policy-statement Lo0-2-bgp {
+        term 1 {
+            from {
+                protocol direct;
+                interface lo0.0;
+            }
+            then accept;
+        }
+    }                                   
+    policy-statement load-balance {
+        term 1 {
+            then {
+                load-balance per-packet;
+            }
+        }
+    }
+    policy-statement p2p-2-bgp {
+        term 1 {
+            from {
+                protocol direct;
+                route-filter 10.0.10.0/23 upto /31;
+                route-filter 10.0.12.0/23 upto /31;
+            }
+            then accept;
+        }
+    }
+}
+</code></pre>
+
+policy-statement load-balance нужна для балансировки трафика по нескольким линкам. 
+
 
 Конфигурация оборудования
 <details>
   <summary>Core</summary>
 <pre><code>
 service password-encryption
-interface Loopback0
- ip address 10.0.250.127 255.255.255.255
- ip router isis 
+router bgp 65000
+ bgp router-id 10.0.250.127
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor Spine peer-group
+ neighbor Spine remote-as 65000
+ neighbor Spine password 7 011C12114834071C77191E5949
+ neighbor 10.0.10.1 peer-group Spine
+ neighbor 10.0.10.3 peer-group Spine
+ neighbor 10.0.10.5 peer-group Spine
+ !
+ address-family ipv4
+  redistribute connected route-map bgp-out
+  neighbor Spine route-reflector-client
+  neighbor 10.0.10.1 activate
+  neighbor 10.0.10.3 activate
+  neighbor 10.0.10.5 activate
+  maximum-paths eibgp 4
+ exit-address-family
 !
-interface Ethernet0/0
- description to_Spine1
- ip address 10.0.10.0 255.255.255.254
- ip router isis 
- isis circuit-type level-2-only
- isis network point-to-point 
+ip forward-protocol nd
 !
-interface Ethernet0/1
- description to_Spine2
- ip address 10.0.10.2 255.255.255.254
- ip router isis 
- isis circuit-type level-2-only
 !
-interface Ethernet0/2
- description to_Spine3
- ip address 10.0.10.4 255.255.255.254
- ip router isis 
- isis circuit-type level-2-only
+no ip http server
+no ip http secure-server
 !
-router isis
- net 49.0010.0100.0025.0127.00
- is-type level-2-only
- metric-style wide
- passive-interface default
- no passive-interface Ethernet0/0
- no passive-interface Ethernet0/1
- no passive-interface Ethernet0/2
- no passive-interface Loopback0
+!
+ip prefix-list loopback seq 5 permit 10.0.250.127/32
+!
+ip prefix-list p2p seq 5 permit 10.0.10.0/24 le 31
+!
+route-map bgp-out permit 10
+ match ip address prefix-list loopback p2p
 </code></pre>
 </details>
 
@@ -95,25 +147,42 @@ router isis
 <pre><code>
 routing-options {
     router-id 10.0.250.1;
+    autonomous-system 65000 loops 3;
+    forwarding-table {
+        export load-balance;
+    }
 }
 protocols {
-    isis {
-        level 2 wide-metrics-only;
-        interface xe-0/0/1.0 {
-            point-to-point;
-            level 2 disable;
+    bgp {
+        export [ Lo0-2-bgp p2p-2-bgp ]; 
+        group Core {
+            type internal;
+            authentication-key "$9$JEDkPz3901h9Aw24ojituOIyl8X7NVwleYg"; ## SECRET-DATA
+            peer-as 65000;
+            neighbor 10.0.10.0;
         }
-        interface xe-0/0/2.0 {          
-            level 2 disable;
+        group Leaf1-2 {
+            type external;
+            family inet {
+                unicast;
+            }
+            authentication-key "$9$uAUk1hrM87w2a7-n9AtIRdbsgGD.P5TFnDj9A"; ## SECRET-DATA
+            export [ Lo0-2-bgp p2p-2-bgp ];
+            peer-as 65001;
+            multipath;
+            as-override;
+            neighbor 10.0.12.1;
+            neighbor 10.0.12.3;
         }
-        interface xe-0/0/3.0 {
-            level 2 disable;
+        group Leaf3 {
+            type external;              
+            family inet {
+                unicast;
+            }
+            authentication-key "$9$3JRh9pBhSeL7Vevm5QzCAM8XNs2ZUjiqm2gTz"; ## SECRET-DATA
+            peer-as 65002;
+            neighbor 10.0.12.5;
         }
-        interface xe-0/0/4.0 {
-            point-to-point;
-            level 1 disable;
-        }
-        interface lo0.0;
     }
 }
 </code></pre>
@@ -122,83 +191,69 @@ protocols {
 <details>
   <summary>Spine2</summary>
 <pre><code>
-feature isis
-router isis 1
-  net 49.0020.0100.0025.0002.00
-  is-type level-1-2
-  distribute level-1 into level-2 all
-  metric-style transition
+feature bgp
+ip prefix-list loopback seq 5 permit 10.0.250.2/32 
+ip prefix-list p2p seq 5 permit 10.0.10.0/23 le 31 
+ip prefix-list p2p seq 10 permit 10.0.12.0/23 le 31 
 !
-interface loopback0
-  ip address 10.0.250.2/32
-  ip router isis 1
+route-map bgp-out permit 10
+  match ip address prefix-list loopback p2p 
 !
-interface Ethernet1/1
-  description to_Leaf1
-  no switchport
-  ip address 10.0.12.6/31
-  isis circuit-type level-1
-  ip router isis 1
-  no shutdown
-
-interface Ethernet1/2
-  description to_Leaf2
-  no switchport
-  ip address 10.0.12.8/31
-  isis network point-to-point
-  isis circuit-type level-1
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/3
-  description to_Leaf3
-  no switchport
-  ip address 10.0.12.10/31
-  isis network point-to-point
-  isis circuit-type level-1
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/4
-  description to_Core
-  no switchport
-  ip address 10.0.10.3/31
-  isis circuit-type level-2
-  ip router isis 1
-  no shutdown
+router bgp 65000
+  router-id 10.0.250.2
+  address-family ipv4 unicast
+    redistribute direct route-map bgp-out
+    maximum-paths 4
+  template peer Leaf1-2
+    remote-as 65001
+    password 3 18a738b2cd29822ea46d57bcca54cb43
+    address-family ipv4 unicast
+      allowas-in 3
+      disable-peer-as-check
+  template peer Leaf3
+    remote-as 65002
+    password 3 18a738b2cd29822e19fb22a8e7065c21
+    address-family ipv4 unicast
+  neighbor 10.0.10.2
+    remote-as 65000
+    password 3 18a738b2cd29822e2cf894444529c6c2
+    address-family ipv4 unicast
+  neighbor 10.0.12.7
+    inherit peer Leaf1-2
+  neighbor 10.0.12.9
+    inherit peer Leaf1-2
+  neighbor 10.0.12.11
+    inherit peer Leaf3
 </code></pre>
 </details>
 
 <details>
   <summary>Spine3</summary>
 <pre><code>
-feature isis 
-router isis 1
-  net 49.0030.0100.0025.0003.00
-  is-type level-1-2
-  distribute level-1 into level-2 all
-  metric-style transition
+feature bgp 
+ip prefix-list loopback seq 5 permit 10.0.250.3/32 
+ip prefix-list p2p seq 5 permit 10.0.10.0/23 le 31 
+ip prefix-list p2p seq 10 permit 10.0.12.0/23 le 31 
+route-map bgp-out permit 10
+  match ip address prefix-list loopback p2p 
 !
-interface loopback0
-  ip address 10.0.250.3/32
-  ip router isis 1
-!
-interface Ethernet1/1
-  description to_Leaf4
-  no switchport
-  ip address 10.0.12.12/31
-  isis network point-to-point
-  isis circuit-type level-1
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/4
-  description to_Core
-  no switchport
-  ip address 10.0.10.5/31
-  isis circuit-type level-2
-  ip router isis 1
-  no shutdown
+router bgp 65000
+  router-id 10.0.250.3
+  address-family ipv4 unicast
+    redistribute direct route-map bgp-out
+    maximum-paths 4
+  template peer Core
+    remote-as 65000
+    password 3 18a738b2cd29822e2cf894444529c6c2
+    address-family ipv4 unicast
+  template peer Leaf4
+    remote-as 65003
+    password 3 18a738b2cd29822e98424f23475ac6ba
+    address-family ipv4 unicast
+  neighbor 10.0.10.4
+    inherit peer Core
+  neighbor 10.0.12.13
+    inherit peer Leaf4
 </code></pre>
 </details>
 
@@ -207,17 +262,60 @@ interface Ethernet1/4
 <pre><code>
 routing-options {
     router-id 10.0.250.128;
+    autonomous-system 65001 loops 3;
+    forwarding-table {
+        export load-balance;
+    }
+}
+policy-options {
+    policy-statement Lo0-2-bgp {
+        term 1 {
+            from {
+                protocol direct;        
+                interface lo0.0;
+            }
+            then accept;
+        }
+    }
+    policy-statement load-balance {
+        term 1 {
+            then {
+                load-balance per-packet;
+            }
+        }
+    }
+    policy-statement p2p-2-bgp {
+        term 1 {
+            from {
+                protocol direct;
+                route-filter 10.0.12.0/23 upto /31;
+            }
+            then accept;
+        }
+    }
 }
 protocols {
-    isis {
-        level 2 disable;
-        level 1 wide-metrics-only;
-        interface xe-0/0/2.0;
-        interface xe-0/0/3.0 {
-            point-to-point;
+    bgp {
+        export [ Lo0-2-bgp p2p-2-bgp ];
+        group Spine {
+            type external;
+            family inet {
+                unicast;
+            }
+            authentication-key "$9$T39p1RSv87SrH.Pfn6lKMLdb4aZGjHbw.P"; ## SECRET-DATA
+            peer-as 65000;              
+            multipath;
+            neighbor 10.0.12.0;
+            neighbor 10.0.12.6;
         }
-        interface xe-0/0/4.0;           
-        interface lo0.0;
+        group Leaf2 {
+            type internal;
+            family inet {
+                unicast;
+            }
+            authentication-key "$9$jzqfz/CuRcluO4JGU.mBIESvWNdbw24W8JG"; ## SECRET-DATA
+            neighbor 10.0.13.1;
+        }
     }
 }
 </code></pre>
@@ -226,97 +324,79 @@ protocols {
 <details>
   <summary>Leaf2</summary>
 <pre><code>
-feature isis 
-router isis 1
-  net 49.0020.0100.0025.0129.00
-  is-type level-1
-  metric-style transition
+feature bgp 
+ip prefix-list loopback seq 5 permit 10.0.250.129/32 
+ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31 
+route-map bgp-out permit 10
+  match ip address prefix-list loopback p2p 
 !
-interface loopback0
-  ip address 10.0.250.129/32
-  ip router isis 1
-!
-interface Ethernet1/2
-  description to_Leaf1
-  no switchport
-  mac-address 000c.2984.fce1
-  ip address 10.0.13.1/31
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/3
-  description to_Spine1
-  no switchport
-  mac-address 000c.2984.fce2
-  ip address 10.0.12.3/31
-  no isis hello-padding
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/4
-  description to_Spine2
-  no switchport
-  mac-address 000c.2984.fce3
-  ip address 10.0.12.9/31
-  isis network point-to-point
-  ip router isis 1
-  no shutdown
+router bgp 65001
+  router-id 10.0.250.129
+  address-family ipv4 unicast
+    redistribute direct route-map bgp-out
+    maximum-paths 4
+  template peer Leaf1
+    remote-as 65001
+    password 3 18a738b2cd29822ea46d57bcca54cb43
+    address-family ipv4 unicast
+  template peer Spine
+    remote-as 65000
+    password 3 18a738b2cd29822ea46d57bcca54cb43
+    address-family ipv4 unicast
+      allowas-in 3
+  neighbor 10.0.12.2
+    inherit peer Spine
+  neighbor 10.0.12.8
+    inherit peer Spine
+  neighbor 10.0.13.0
+    inherit peer Leaf1
 </code></pre>
 </details>
 
 <details>
   <summary>Leaf3</summary>
 <pre><code>
-feature isis 
-router isis 1
-  net 49.0020.0100.0025.0130.00
-  is-type level-1
-  metric-style transition
+feature bgp 
+ip prefix-list loobpack seq 5 permit 10.0.250.130/32 
+ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31 
+route-map bgp-out permit 10
+  match ip address prefix-list loobpack p2p 
 !
-interface loopback0
-  ip address 10.0.250.130/32
-  ip router isis 1
-!
-interface Ethernet1/3
-  description to_Spine1
-  no switchport
-  ip address 10.0.12.5/31
-  ip router isis 1
-  no shutdown
-!
-interface Ethernet1/4
-  description to_Spine2
-  no switchport
-  mac-address 000c.2985.fce0
-  ip address 10.0.12.11/31
-  isis network point-to-point
-  ip router isis 1
-  no shutdown
+router bgp 65002
+  router-id 10.0.250.130
+  address-family ipv4 unicast
+    redistribute direct route-map bgp-out
+    maximum-paths 2
+  template peer Spine
+    remote-as 65000
+    password 3 18a738b2cd29822e19fb22a8e7065c21
+    address-family ipv4 unicast
+  neighbor 10.0.12.4
+    inherit peer Spine
+  neighbor 10.0.12.10
+    inherit peer Spine
 </code></pre>
 </details>
 
 <details>
   <summary>Leaf4</summary>
 <pre><code>
-feature isis 
-router isis 1
-  net 49.0030.0100.0025.0131.00
-  is-type level-1
-  metric-style transition
+feature bgp 
+ip prefix-list loopback seq 5 permit 10.0.250.131/32 
+ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31 
+route-map bgp-out permit 10
+  match ip address prefix-list loopback p2p 
 !
-interface loopback0
-  ip address 10.0.250.131/32
-  ip router isis 1
-!
-interface Ethernet1/4
-  description to_Spine3
-  no switchport
-  mac-address 000c.2984.ffe0
-  ip address 10.0.12.13/31
-  isis network point-to-point
-  ip router isis 1
-  no shutdown
-!
+router bgp 65003
+  router-id 10.0.250.131
+  address-family ipv4 unicast
+    redistribute direct route-map bgp-out
+  template peer Spine
+    remote-as 65000
+    password 3 18a738b2cd29822e98424f23475ac6ba
+    address-family ipv4 unicast
+  neighbor 10.0.12.12
+    inherit peer Spine
 </code></pre>
 </details>
 
