@@ -38,12 +38,12 @@
 | Spine2 | e1/2 | 10.0.12.8/31 | to_Leaf2 |
 | Spine2 | e1/3 | 10.0.12.10/31 | to_Leaf3 |
 | Spine3 | e1/1 | 10.0.12.12/31 | to_Leaf4 |
-| Leaf1 | xe-0/0/2 | 10.0.13.0/31 | to_Leaf2 |
 | Leaf1 | xe-0/0/3 | 10.0.12.1/31 | to_Spine1 |
 | Leaf1 | xe-0/0/4 | 10.0.12.7/31 | to_Spine2 |
-| Leaf2 | e1/2 | 10.0.13.1/31 | to_Leaf1 |
+| Leaf2 | e1/2 | 10.0.13.0/31 | to_Leaf3 |
 | Leaf2 | e1/3 | 10.0.12.3/31 | to_Spine1 |
 | Leaf2 | e1/4 | 10.0.12.9/31 | to_Spine2 |
+| Leaf3 | e1/2 | 10.0.13.1/31 | to_Leaf2 |
 | Leaf3 | e1/3 | 10.0.12.5/31 | to_Spine1 |
 | Leaf3 | e1/4 | 10.0.12.11/31 | to_Spine2 |
 | Leaf4 | e1/4 | 10.0.12.13/31 | to_Spine3 |
@@ -51,10 +51,8 @@
 Для настройки underlay BGP необходимо выполнить следующие условия: 
 - все BGP-соседства устанавливаются через адреса, указанные на физических интерфейсах
 - соседу анонсируются только connected-сети (loopback и p2p)
-- для установления соседства требуется аутентификация: otus_as65000, otus_as65001, otus_as65002 и otus_as65003 - для каждой AS
+- для установления соседства требуется аутентификация: otus_as65000, otus_as65001, otus_as65002. Номер AS в пароле используем тот, в которой используется вышестоящий по иерархии узел. То есть: Core -> Spine1, Spine2, Spine3 - otus_as65000; Spine1, Spine2 -> Leaf1, Leaf2, Leaf3 - otus_as65001; Spine3 -> Leaf4 - otus_as65002
 - на всех роутерах активирован maximum-path 4
-- Core и три Spine находятся в одной AS, чтобы не устанавливать full-mesh соседств, Core настраивается в качестве route reflector
-- для leaf1 и leaf2 активируется allowas-in
 
 На всех маршрутизаторах Cisco создан route-map bgp-out, который матчит два prefix-list: p2p - содержит в себе point-to-point адреса; loopback - содержит в себе loopback-адрес устройства. 
 <pre><code>
@@ -100,6 +98,11 @@ policy-options {
 
 policy-statement load-balance нужна для балансировки трафика по нескольким линкам. 
 
+На Cisco также используется route-map leaf-as, в котором указываются номера AS нижестоящий узлов. Это сделано для динамического установления соседств:
+<pre><code>
+route-map leaf-as permit 10
+  match as-number 65101-65199 
+</code></pre>
 
 Конфигурация оборудования
 <details>
@@ -109,28 +112,18 @@ service password-encryption
 router bgp 65000
  bgp router-id 10.0.250.127
  bgp log-neighbor-changes
+ bgp listen range 10.0.10.0/23 peer-group Spine
+ bgp listen limit 10
  no bgp default ipv4-unicast
  neighbor Spine peer-group
- neighbor Spine remote-as 65000
+ neighbor Spine remote-as 65001 alternate-as 65002 
  neighbor Spine password 7 011C12114834071C77191E5949
- neighbor 10.0.10.1 peer-group Spine
- neighbor 10.0.10.3 peer-group Spine
- neighbor 10.0.10.5 peer-group Spine
  !
  address-family ipv4
   redistribute connected route-map bgp-out
-  neighbor Spine route-reflector-client
-  neighbor 10.0.10.1 activate
-  neighbor 10.0.10.3 activate
-  neighbor 10.0.10.5 activate
+  neighbor Spine activate
   maximum-paths eibgp 4
  exit-address-family
-!
-ip forward-protocol nd
-!
-!
-no ip http server
-no ip http secure-server
 !
 !
 ip prefix-list loopback seq 5 permit 10.0.250.127/32
@@ -147,16 +140,17 @@ route-map bgp-out permit 10
 <pre><code>
 routing-options {
     router-id 10.0.250.1;
-    autonomous-system 65000 loops 3;
+    autonomous-system 65001 loops 3;
     forwarding-table {
         export load-balance;
     }
 }
 protocols {
+protocols {
     bgp {
         export [ Lo0-2-bgp p2p-2-bgp ]; 
         group Core {
-            type internal;
+            type external;
             family inet {
                 unicast;
             }
@@ -164,27 +158,22 @@ protocols {
             peer-as 65000;
             neighbor 10.0.10.0;
         }
-        group Leaf1-2 {
+        group Leaf {
             type external;
             family inet {
                 unicast;
             }
-            authentication-key "$9$uAUk1hrM87w2a7-n9AtIRdbsgGD.P5TFnDj9A"; ## SECRET-DATA
-            export [ Lo0-2-bgp p2p-2-bgp ];
-            peer-as 65001;
-            multipath;
-            as-override;
-            neighbor 10.0.12.1;
-            neighbor 10.0.12.3;
-        }
-        group Leaf3 {
-            type external;              
-            family inet {
-                unicast;
+            authentication-key "$9$hWXrvL-VYJUHYguBIRle4aZD.PFn/9tuPfBI"; ## SECRET-DATA
+            multipath multiple-as;
+            neighbor 10.0.12.1 {
+                peer-as 65101;
             }
-            authentication-key "$9$3JRh9pBhSeL7Vevm5QzCAM8XNs2ZUjiqm2gTz"; ## SECRET-DATA
-            peer-as 65002;
-            neighbor 10.0.12.5;
+            neighbor 10.0.12.3 {
+                peer-as 65102;          
+            }
+            neighbor 10.0.12.5 {
+                peer-as 65103;
+            }
         }
     }
 }
@@ -202,31 +191,27 @@ ip prefix-list p2p seq 10 permit 10.0.12.0/23 le 31
 route-map bgp-out permit 10
   match ip address prefix-list loopback p2p 
 !
-router bgp 65000
+route-map leaf-as permit 10
+  match as-number 65101-65199 
+!
+router bgp 65001
   router-id 10.0.250.2
+  bestpath as-path multipath-relax
   address-family ipv4 unicast
     redistribute direct route-map bgp-out
     maximum-paths 4
-  template peer Leaf1-2
-    remote-as 65001
-    password 3 18a738b2cd29822ea46d57bcca54cb43
-    address-family ipv4 unicast
-      allowas-in 3
-      disable-peer-as-check
-  template peer Leaf3
-    remote-as 65002
-    password 3 18a738b2cd29822e19fb22a8e7065c21
-    address-family ipv4 unicast
-  neighbor 10.0.10.2
+  template peer Core
     remote-as 65000
     password 3 18a738b2cd29822e2cf894444529c6c2
     address-family ipv4 unicast
-  neighbor 10.0.12.7
-    inherit peer Leaf1-2
-  neighbor 10.0.12.9
-    inherit peer Leaf1-2
-  neighbor 10.0.12.11
-    inherit peer Leaf3
+  template peer Leaf
+    password 3 18a738b2cd29822ea46d57bcca54cb43
+    address-family ipv4 unicast
+  neighbor 10.0.10.2
+    inherit peer Core
+  neighbor 10.0.12.0/23 remote-as route-map leaf-as
+    inherit peer Leaf
+    address-family ipv4 unicast
 </code></pre>
 </details>
 
@@ -240,8 +225,12 @@ ip prefix-list p2p seq 10 permit 10.0.12.0/23 le 31
 route-map bgp-out permit 10
   match ip address prefix-list loopback p2p 
 !
-router bgp 65000
+route-map leaf-as permit 10
+  match as-number 65201-65299 
+!
+router bgp 65002
   router-id 10.0.250.3
+  bestpath as-path multipath-relax
   address-family ipv4 unicast
     redistribute direct route-map bgp-out
     maximum-paths 4
@@ -249,14 +238,13 @@ router bgp 65000
     remote-as 65000
     password 3 18a738b2cd29822e2cf894444529c6c2
     address-family ipv4 unicast
-  template peer Leaf4
-    remote-as 65003
-    password 3 18a738b2cd29822e98424f23475ac6ba
+  template peer Leaf
+    password 3 18a738b2cd29822e19fb22a8e7065c21
     address-family ipv4 unicast
   neighbor 10.0.10.4
     inherit peer Core
-  neighbor 10.0.12.13
-    inherit peer Leaf4
+  neighbor 10.0.12.0/23 remote-as route-map leaf-as
+    inherit peer Leaf
 </code></pre>
 </details>
 
@@ -305,21 +293,13 @@ protocols {
             family inet {
                 unicast;
             }
-            authentication-key "$9$T39p1RSv87SrH.Pfn6lKMLdb4aZGjHbw.P"; ## SECRET-DATA
-            peer-as 65000;              
-            multipath;
+            authentication-key "$9$INlclMxNb4JDbsAuOBSyYgoZHqTz3n9Aq.uO"; ## SECRET-DATA
+            peer-as 65001;
+            multipath multiple-as;
             neighbor 10.0.12.0;
             neighbor 10.0.12.6;
         }
-        group Leaf2 {
-            type internal;
-            family inet {
-                unicast;
-            }
-            authentication-key "$9$jzqfz/CuRcluO4JGU.mBIESvWNdbw24W8JG"; ## SECRET-DATA
-            neighbor 10.0.13.1;
-        }
-    }
+    }                             
 }
 </code></pre>
 </details>
@@ -333,26 +313,20 @@ ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31
 route-map bgp-out permit 10
   match ip address prefix-list loopback p2p 
 !
-router bgp 65001
+router bgp 65102
   router-id 10.0.250.129
+  bestpath as-path multipath-relax
   address-family ipv4 unicast
     redistribute direct route-map bgp-out
     maximum-paths 4
-  template peer Leaf1
+  template peer Spine
     remote-as 65001
     password 3 18a738b2cd29822ea46d57bcca54cb43
     address-family ipv4 unicast
-  template peer Spine
-    remote-as 65000
-    password 3 18a738b2cd29822ea46d57bcca54cb43
-    address-family ipv4 unicast
-      allowas-in 3
   neighbor 10.0.12.2
     inherit peer Spine
   neighbor 10.0.12.8
     inherit peer Spine
-  neighbor 10.0.13.0
-    inherit peer Leaf1
 </code></pre>
 </details>
 
@@ -365,14 +339,15 @@ ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31
 route-map bgp-out permit 10
   match ip address prefix-list loobpack p2p 
 !
-router bgp 65002
+router bgp 65103
   router-id 10.0.250.130
+  bestpath as-path multipath-relax
   address-family ipv4 unicast
     redistribute direct route-map bgp-out
-    maximum-paths 2
+    maximum-paths 4
   template peer Spine
-    remote-as 65000
-    password 3 18a738b2cd29822e19fb22a8e7065c21
+    remote-as 65001
+    password 3 18a738b2cd29822ea46d57bcca54cb43
     address-family ipv4 unicast
   neighbor 10.0.12.4
     inherit peer Spine
@@ -390,13 +365,15 @@ ip prefix-list p2p seq 5 permit 10.0.12.0/23 le 31
 route-map bgp-out permit 10
   match ip address prefix-list loopback p2p 
 !
-router bgp 65003
+router bgp 65201
   router-id 10.0.250.131
+  bestpath as-path multipath-relax
   address-family ipv4 unicast
     redistribute direct route-map bgp-out
+    maximum-paths 4
   template peer Spine
-    remote-as 65000
-    password 3 18a738b2cd29822e98424f23475ac6ba
+    remote-as 65002
+    password 3 18a738b2cd29822e19fb22a8e7065c21
     address-family ipv4 unicast
   neighbor 10.0.12.12
     inherit peer Spine
@@ -408,17 +385,17 @@ router bgp 65003
 <pre><code>
 Core#sh ip route 10.0.250.0 255.255.255.0 longer-prefixes 
 
-B        10.0.250.1/32 [200/0] via 10.0.10.1, 01:58:05
-B        10.0.250.2/32 [200/0] via 10.0.10.3, 01:59:29
-B        10.0.250.3/32 [200/0] via 10.0.10.5, 01:58:45
+B        10.0.250.1/32 [20/0] via 10.0.10.1, 01:18:47
+B        10.0.250.2/32 [20/0] via 10.0.10.3, 01:01:28
+B        10.0.250.3/32 [20/0] via 10.0.10.5, 01:00:33
 C        10.0.250.127/32 is directly connected, Loopback0
-B        10.0.250.128/32 [200/0] via 10.0.12.7, 01:41:45
-                         [200/0] via 10.0.12.1, 01:41:45
-B        10.0.250.129/32 [200/0] via 10.0.12.9, 01:46:08
-                         [200/0] via 10.0.12.3, 01:46:08
-B        10.0.250.130/32 [200/0] via 10.0.12.11, 01:41:30
-                         [200/0] via 10.0.12.5, 01:41:30
-B        10.0.250.131/32 [200/0] via 10.0.12.13, 01:41:20
+B        10.0.250.128/32 [20/0] via 10.0.10.3, 00:17:07
+                         [20/0] via 10.0.10.1, 00:17:07
+B        10.0.250.129/32 [20/0] via 10.0.10.3, 00:17:17
+                         [20/0] via 10.0.10.1, 00:17:17
+B        10.0.250.130/32 [20/0] via 10.0.10.3, 00:17:15
+                         [20/0] via 10.0.10.1, 00:17:15
+B        10.0.250.131/32 [20/0] via 10.0.10.5, 00:49:59
 </code></pre>
 </details>
 
@@ -427,15 +404,15 @@ B        10.0.250.131/32 [200/0] via 10.0.12.13, 01:41:20
 Далее проверим, что все Spine установили BGP-соседства с Leaf:
 <pre><code>
 root@Spine1> show bgp summary 
-Groups: 3 Peers: 4 Down peers: 0
+Groups: 2 Peers: 4 Down peers: 0
 Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
 inet.0               
-                      28         16          0          0          0          0
+                      23         13          0          0          0          0
 Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
-10.0.10.0             65000        273        271       0       0     1:59:32 10/11/11/0           0/0/0/0
-10.0.12.1             65001        232        236       0       0     1:43:17 3/7/7/0              0/0/0/0
-10.0.12.3             65001        222        248       0       0     1:47:36 2/7/7/0              0/0/0/0
-10.0.12.5             65002        208        235       0       0     1:43:02 1/3/3/0              0/0/0/0
+10.0.10.0             65000        181        183       0       0     1:19:32 7/14/14/0            0/0/0/0
+10.0.12.1             65101         43         52       0       0       17:52 2/3/3/0              0/0/0/0
+10.0.12.3             65102         40         55       0       0       18:03 2/3/3/0              0/0/0/0
+10.0.12.5             65103         39         53       0       0       18:02 2/3/3/0              0/0/0/0
 </code></pre>
 </details>
 
@@ -443,42 +420,32 @@ Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn St
 <pre><code>
 Spine2# sh ip bgp summary 
 BGP summary information for VRF default, address family IPv4 Unicast
-BGP router identifier 10.0.250.2, local AS number 65000
-BGP table version is 42, IPv4 Unicast config peers 4, capable peers 4
-19 network entries and 37 paths using 6408 bytes of memory
-BGP attribute entries [13/2028], BGP AS path entries [3/18]
-BGP community entries [0/0], BGP clusterlist entries [2/8]
+BGP router identifier 10.0.250.2, local AS number 65001
+BGP table version is 48, IPv4 Unicast config peers 5, capable peers 4
+17 network entries and 21 paths using 4184 bytes of memory
+BGP attribute entries [7/1092], BGP AS path entries [6/48]
+BGP community entries [0/0], BGP clusterlist entries [0/0]
 
 Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
-10.0.10.2       4 65000     145     132       42    0    0 02:02:41 15        
-10.0.12.7       4 65001     232     217       42    0    0 01:43:26 7         
-10.0.12.9       4 65001     115     122       42    0    0 01:47:50 7         
-10.0.12.11      4 65002     112     116       42    0    0 01:43:11 3   
+10.0.10.2       4 65000      78      71       48    0    0 01:02:50 7         
+10.0.12.7       4 65101     100      95       48    0    0 00:42:51 3         
+10.0.12.9       4 65102      54      60       48    0    0 00:47:15 3         
+10.0.12.11      4 65103      52      58       48    0    0 00:45:10 3       
 </code></pre>
 
 
 <pre><code>
 Spine3# sh ip bgp summary 
 BGP summary information for VRF default, address family IPv4 Unicast
-BGP router identifier 10.0.250.3, local AS number 65000
-BGP table version is 31, IPv4 Unicast config peers 2, capable peers 2
-19 network entries and 21 paths using 4360 bytes of memory
-BGP attribute entries [8/1248], BGP AS path entries [3/18]
-BGP community entries [0/0], BGP clusterlist entries [2/8]
+BGP router identifier 10.0.250.3, local AS number 65002
+BGP table version is 33, IPv4 Unicast config peers 3, capable peers 2
+18 network entries and 20 paths using 4144 bytes of memory
+BGP attribute entries [8/1248], BGP AS path entries [6/64]
+BGP community entries [0/0], BGP clusterlist entries [0/0]
 
 Neighbor        V    AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
-10.0.10.4       4 65000     148     129       31    0    0 02:02:19 16        
-10.0.12.13      4 65003     110     117       31    0    0 01:43:25 2  
-</code></pre>
-
-Последним этапом проверим установление isis-сессии между Leaf1 и Leaf2:
-
-<pre><code>
-root@Leaf1> show isis adjacency 
-Interface             System         L State        Hold (secs) SNPA
-xe-0/0/2.0            Leaf2          1  Up                   27  0:c:29:84:fc:e1
-xe-0/0/3.0            Spine1         1  Up                   25
-xe-0/0/4.0            Spine2         1  Up                    6  50:0:0:5:0:7
+10.0.10.4       4 65000      75      64       33    0    0 00:58:22 15        
+10.0.12.13      4 65201      54      61       33    0    0 00:47:49 2    
 </code></pre>
 
 Проверим связность Loobback-адресов Leaf1 и Leaf4:
@@ -496,101 +463,95 @@ round-trip min/avg/max/stddev = 20.056/79.004/291.592/106.410 ms
 <pre><code>
 root@Leaf1> show route 10.0.250.0/24 protocol bgp active-path 
 
-inet.0: 24 destinations, 59 routes (24 active, 0 holddown, 0 hidden)
+inet.0: 22 destinations, 38 routes (22 active, 0 holddown, 0 hidden)
 + = Active Route, - = Last Active, * = Both
 
-10.0.250.1/32      *[BGP/170] 01:46:42, localpref 100
-                      AS path: 65000 I, validation-state: unverified
+10.0.250.1/32      *[BGP/170] 00:19:38, localpref 100
+                      AS path: 65001 I, validation-state: unverified
+                    > to 10.0.12.0 via xe-0/0/3.0
+10.0.250.2/32      *[BGP/170] 00:43:59, MED 0, localpref 100
+                      AS path: 65001 ?, validation-state: unverified
+                    > to 10.0.12.6 via xe-0/0/4.0
+10.0.250.3/32      *[BGP/170] 00:43:59, localpref 100, from 10.0.12.6
+                      AS path: 65001 65000 65002 ?, validation-state: unverified
                     > to 10.0.12.0 via xe-0/0/3.0
                       to 10.0.12.6 via xe-0/0/4.0
-10.0.250.2/32      *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
-                      AS path: 65000 ?, validation-state: unverified
+10.0.250.127/32    *[BGP/170] 00:43:59, localpref 100
+                      AS path: 65001 65000 ?, validation-state: unverified
                       to 10.0.12.0 via xe-0/0/3.0
                     > to 10.0.12.6 via xe-0/0/4.0
-10.0.250.3/32      *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
-                      AS path: 65000 ?, validation-state: unverified
-                      to 10.0.12.0 via xe-0/0/3.0
-                    > to 10.0.12.6 via xe-0/0/4.0
-10.0.250.127/32    *[BGP/170] 01:46:42, localpref 100, from 10.0.12.0
-                      AS path: 65000 ?, validation-state: unverified
-                      to 10.0.12.0 via xe-0/0/3.0
-                    > to 10.0.12.6 via xe-0/0/4.0
-10.0.250.129/32    *[BGP/170] 00:04:57, MED 0, localpref 100
-                      AS path: ?, validation-state: unverified
-                    > to 10.0.13.1 via xe-0/0/2.0
-10.0.250.130/32    *[BGP/170] 01:46:22, localpref 100, from 10.0.12.6
-                      AS path: 65000 65002 ?, validation-state: unverified
+10.0.250.129/32    *[BGP/170] 00:43:59, localpref 100, from 10.0.12.6
+                      AS path: 65001 65102 ?, validation-state: unverified
                     > to 10.0.12.0 via xe-0/0/3.0
                       to 10.0.12.6 via xe-0/0/4.0
-10.0.250.131/32    *[BGP/170] 01:46:13, localpref 100, from 10.0.12.6
-                      AS path: 65000 65003 ?, validation-state: unverified
+10.0.250.130/32    *[BGP/170] 00:43:59, localpref 100, from 10.0.12.6
+                      AS path: 65001 65103 ?, validation-state: unverified
+                    > to 10.0.12.0 via xe-0/0/3.0
+                      to 10.0.12.6 via xe-0/0/4.0
+10.0.250.131/32    *[BGP/170] 00:43:59, localpref 100, from 10.0.12.6
+                      AS path: 65001 65000 65002 65201 ?, validation-state: unverified
                     > to 10.0.12.0 via xe-0/0/3.0
                       to 10.0.12.6 via xe-0/0/4.0
 </code></pre>
 
-На Leaf1 видно, что все префиксы имеют по 2 маршрута, кроме 10.0.250.129/32, посколько данный маршрут принимается от iBGP-соседства с Leaf2.
-
 Таблица маршрутизации Leaf2:
 <pre><code>
-Leaf2# show ip route 10.0.250.0/24 longer-prefixes bgp-65001 
+Leaf2# sh ip route 10.0.250.0/24 longer-prefixes bgp-65102 
 IP Route Table for VRF "default"
 '*' denotes best ucast next-hop
 '**' denotes best mcast next-hop
 '[x/y]' denotes [preference/metric]
 '%<string>' in via output denotes VRF <string>
 
-10.0.250.1/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
-10.0.250.2/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+10.0.250.1/32, ubest/mbest: 1/0
+    *via 10.0.12.2, [20/0], 00:20:49, bgp-65102, external, tag 65001
+10.0.250.2/32, ubest/mbest: 1/0
+    *via 10.0.12.8, [20/0], 00:49:24, bgp-65102, external, tag 65001
 10.0.250.3/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.2, [20/0], 00:20:49, bgp-65102, external, tag 65001
+    *via 10.0.12.8, [20/0], 00:49:24, bgp-65102, external, tag 65001
 10.0.250.127/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
-10.0.250.128/32, ubest/mbest: 1/0
-    *via 10.0.13.0, [200/0], 00:01:06, bgp-65001, internal, tag 65001
+    *via 10.0.12.2, [20/0], 00:20:49, bgp-65102, external, tag 65001
+    *via 10.0.12.8, [20/0], 00:49:24, bgp-65102, external, tag 65001
+10.0.250.128/32, ubest/mbest: 2/0
+    *via 10.0.12.2, [20/0], 00:20:37, bgp-65102, external, tag 65001
+    *via 10.0.12.8, [20/0], 00:45:00, bgp-65102, external, tag 65001
 10.0.250.130/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.2, [20/0], 00:20:46, bgp-65102, external, tag 65001
+    *via 10.0.12.8, [20/0], 00:47:19, bgp-65102, external, tag 65001
 10.0.250.131/32, ubest/mbest: 2/0
-    *via 10.0.12.2, [20/0], 00:01:29, bgp-65001, external, tag 65000
-    *via 10.0.12.8, [20/0], 00:01:29, bgp-65001, external, tag 65000
+    *via 10.0.12.2, [20/0], 00:20:49, bgp-65102, external, tag 65001
+    *via 10.0.12.8, [20/0], 00:49:24, bgp-65102, external, tag 65001
 </code></pre>
 
 И Leaf3: 
 <pre><code>
-Leaf3# show ip route 10.0.250.0/24 longer-prefixes bgp-65002 
+Leaf3# show ip route 10.0.250.0/24 longer-prefixes bgp-65103 
 IP Route Table for VRF "default"
 '*' denotes best ucast next-hop
 '**' denotes best mcast next-hop
 '[x/y]' denotes [preference/metric]
 '%<string>' in via output denotes VRF <string>
 
-10.0.250.1/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
-10.0.250.2/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+10.0.250.1/32, ubest/mbest: 1/0
+    *via 10.0.12.4, [20/0], 00:21:27, bgp-65103, external, tag 65001
+10.0.250.2/32, ubest/mbest: 1/0
+    *via 10.0.12.10, [20/0], 00:47:59, bgp-65103, external, tag 65001
 10.0.250.3/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.4, [20/0], 00:21:27, bgp-65103, external, tag 65001
+    *via 10.0.12.10, [20/0], 00:47:59, bgp-65103, external, tag 65001
 10.0.250.127/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.4, [20/0], 00:21:27, bgp-65103, external, tag 65001
+    *via 10.0.12.10, [20/0], 00:47:59, bgp-65103, external, tag 65001
 10.0.250.128/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 00:26:06, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 00:26:06, bgp-65002, external, tag 65000
+    *via 10.0.12.4, [20/0], 00:21:18, bgp-65103, external, tag 65001
+    *via 10.0.12.10, [20/0], 00:45:40, bgp-65103, external, tag 65001
 10.0.250.129/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:58, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:58, bgp-65002, external, tag 65000
+    *via 10.0.12.4, [20/0], 00:21:27, bgp-65103, external, tag 65001
+    *via 10.0.12.10, [20/0], 00:47:59, bgp-65103, external, tag 65001
 10.0.250.131/32, ubest/mbest: 2/0
-    *via 10.0.12.4, [20/0], 02:19:48, bgp-65002, external, tag 65000
-    *via 10.0.12.10, [20/0], 02:19:48, bgp-65002, external, tag 65000
+    *via 10.0.12.4, [20/0], 00:21:27, bgp-65103, external, tag 65001
+    *via 10.0.12.10, [20/0], 00:47:59, bgp-65103, external, tag 65001
 </code></pre>
 
 На этом задание выполнено: все BGP-соседства установлены и маршрутизаторы "видят" друг друга.
