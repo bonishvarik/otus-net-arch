@@ -5,7 +5,7 @@
 После скачивания копируем архив с образом на нашу виртуалку с eve-ng. Я использую утилиту scp, поскольку у меня на Windows 10 установлена подсистема Linux
 
 <pre><code>
-bonik@Bonikacer:/mnt/d/Downloads$ scp linux-ubuntu-mcast-source.zip bonik@192.168.1.206:/home/bonik/
+bonik@blabla:/mnt/d/Downloads$ scp linux-ubuntu-mcast-source.zip bonik@192.168.1.206:/home/bonik/
 bonik@192.168.1.206's password:
 linux-ubuntu-mcast-source.zip                                                                 100%  606MB  57.8MB/s   00:10
 </code></pre>
@@ -23,8 +23,6 @@ Archive:  linux-ubuntu-mcast-source.zip
 bonik@eve-ng:~$ su
 Password: 
 root@eve-ng:/home/bonik# mv linux-ubuntu-mcast-source /opt/unetlab/addons/qemu/
-root@eve-ng:/home/bonik# ls /opt/unetlab/addons/qemu/ -la | grep mcast
-drwxrwxr-x  2 bonik bonik 4096 Jan 14  2021 linux-ubuntu-mcast-source
 </code></pre>
 
 Было бы неплохо проверить контрольную сумму скачанного образа:
@@ -33,6 +31,7 @@ root@eve-ng:~$ md5sum /opt/unetlab/addons/qemu/linux-ubuntu-mcast-source/virtioa
 df6a2a4f73ccbdfbdd853687be60f37d  /opt/unetlab/addons/qemu/linux-ubuntu-mcast-source/virtioa.qcow2
 </code></pre>
 
+Если контрольная сумма файла не совпадает с тем, что выше - файл поврежден. Повторите процедуру скачивания.
 И завершаем процедуру выполнением команды (от рута!!!)
 <pre><code>
 root@eve-ng:/home/bonik# /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
@@ -58,35 +57,34 @@ root@eve-ng:/home/bonik# /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
 root@ubuntu:~# cat /etc/network/interfaces
 # This file describes the network interfaces available on your system
 # and how to activate them. For more information, see interfaces(5).
-
 source /etc/network/interfaces.d/*
-
+#
 # The loopback network interface
 auto lo
 iface lo inet loopback
-
+#
 # The network interface for multicasting
 auto ens3
 iface ens3 inet manual
-
+#
 auto vlan111
 iface vlan111 inet static
         address 172.17.111.1
         netmask 255.255.255.252
         vlan_raw_device ens3
-
+#
 auto vlan112 
 iface vlan112 inet static
         address 172.17.112.1
         netmask 255.255.255.252
         vlan_raw_device ens3
-
+#
 auto vlan113
 iface vlan113 inet static
         address 172.17.113.1
         netmask 255.255.255.252
         vlan_raw_device ens3
-
+#
 auto vlan114
 iface vlan114 inet static
         address 172.17.114.1
@@ -261,31 +259,24 @@ Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
 (*, 239.0.0.114), 00:14:14/stopped, RP 1.1.1.1, flags: SP
   Incoming interface: Null, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (172.17.114.1, 239.0.0.114), 00:14:14/00:02:40, flags: PT
   Incoming interface: Ethernet0/0.114, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (*, 239.0.0.113), 00:14:14/stopped, RP 1.1.1.1, flags: SP
   Incoming interface: Null, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (172.17.113.1, 239.0.0.113), 00:14:14/00:02:42, flags: PT
   Incoming interface: Ethernet0/0.113, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (*, 239.0.0.112), 00:14:14/stopped, RP 1.1.1.1, flags: SP
   Incoming interface: Null, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (172.17.112.1, 239.0.0.112), 00:14:14/00:02:43, flags: PT
   Incoming interface: Ethernet0/0.112, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (*, 239.0.0.111), 00:14:14/stopped, RP 1.1.1.1, flags: SP
   Incoming interface: Null, RPF nbr 0.0.0.0
   Outgoing interface list: Null
-
 (172.17.111.1, 239.0.0.111), 00:14:14/00:02:33, flags: PT
   Incoming interface: Ethernet0/0.111, RPF nbr 0.0.0.0
   Outgoing interface list: Null
