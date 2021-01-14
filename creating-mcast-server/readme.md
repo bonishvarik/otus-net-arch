@@ -292,3 +292,5 @@ Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
 <pre><code>
 root@ubuntu:~# killall tsplay 
 </code></pre>
+
+P.S. Если вдруг захочется посмотреть добавить в сеть приемник мультикаста, в этом случае создается Linux-хост с графическим интерфейсов, на него ставится VLC-player с помощью команды 'snap install vlc' и через него открывается мультикастовая группа с указанием IP-адреса и номера порта. Например, 'udp://@239.0.0.111:1234'
