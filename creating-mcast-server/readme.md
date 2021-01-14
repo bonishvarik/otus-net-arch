@@ -1,5 +1,7 @@
+# Создание источника мультикаста в EVE-NG
+
 В этом небольшом мануале опишу, как к себе в лабораторный стенд eve-ng добавить источник мультикаста для выполнения лабораторных работ. 
-Итак, первым делом, необходимо образ себе скачать. Идем по ссылке и качаем: https://yadi.sk/d/GNxWpaG-35pbqA
+Итак, первым делом, необходимо образ себе скачать. Идем по [ссылке](https://yadi.sk/d/GNxWpaG-35pbqA) и качаем
 После скачивания копируем архив с образом на нашу виртуалку с eve-ng. Я использую утилиту scp, поскольку у меня на Windows 10 установлена подсистема Linux
 
 <pre><code>
@@ -23,6 +25,12 @@ Password:
 root@eve-ng:/home/bonik# mv linux-ubuntu-mcast-source /opt/unetlab/addons/qemu/
 root@eve-ng:/home/bonik# ls /opt/unetlab/addons/qemu/ -la | grep mcast
 drwxrwxr-x  2 bonik bonik 4096 Jan 14  2021 linux-ubuntu-mcast-source
+</code></pre>
+
+Было бы неплохо проверить контрольную сумму скачанного образа:
+<pre><code>
+root@eve-ng:~$ md5sum /opt/unetlab/addons/qemu/linux-ubuntu-mcast-source/virtioa.qcow2 
+df6a2a4f73ccbdfbdd853687be60f37d  /opt/unetlab/addons/qemu/linux-ubuntu-mcast-source/virtioa.qcow2
 </code></pre>
 
 И завершаем процедуру выполнением команды (от рута!!!)
