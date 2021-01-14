@@ -33,6 +33,8 @@ root@eve-ng:/home/bonik# /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
 Открываем EVE-NG и пробуем добавить Linux-хост: 
 
 ![Добавление хоста](https://github.com/bonishvarik/otus-net-arch/blob/main/creating-mcast-server/1.png)
+
+
 Чуток расшифровки: 
 1 - Собственно, сам шаблон
 2 - Выбираем конкретный образ, в случае, если их несколько
@@ -152,4 +154,138 @@ video.ts - имя видеофайла, который будет вещатьс
 
 В случае необходимости, всегда можно изменить сам скрипт и настройки сети, чтобы добавить или удалить сетевые интерфейсы или мультикастовые группы. 
 Перед стартом скрипта, давайте подключим наш сервер к оборудованию Cisco и проверим, что мультикаст точно льется: 
+![Топология сети](https://github.com/bonishvarik/otus-net-arch/blob/main/creating-mcast-server/2.png)
 
+Конфигурация Cisco выглядит следующий образом: 
+<pre><code>
+ip multicast-routing 
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Ethernet0/0.111
+ encapsulation dot1Q 111
+ ip address 172.17.111.2 255.255.255.252
+ ip pim passive
+!
+interface Ethernet0/0.112
+ encapsulation dot1Q 112
+ ip address 172.17.112.2 255.255.255.252
+ ip pim passive
+!
+interface Ethernet0/0.113
+ encapsulation dot1Q 113
+ ip address 172.17.113.2 255.255.255.252
+ ip pim passive
+!
+interface Ethernet0/0.114
+ encapsulation dot1Q 114
+ ip address 172.17.114.2 255.255.255.252
+ ip pim passive
+!
+ip pim rp-address 1.1.1.1
+</code></pre>
+<details>
+<summary>Убедимся, что с Cisco можем пинговать сервер</summary>
+<pre><code>
+Router#ping 172.17.111.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.17.111.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/1 ms
+Router#ping 172.17.111.2
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.17.111.2, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/3/5 ms
+Router#ping 172.17.112.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.17.112.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/1 ms
+Router#ping 172.17.113.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.17.113.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/1 ms
+Router#ping 172.17.114.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.17.114.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/1 ms
+</code></pre>
+</details>
+
+Теперь на сервере запускаем наш скрипт
+<pre><code>
+root@ubuntu:~# ./start_mcast.sh 
+</code></pre>
+
+И идем на циску. Для начала посмотрим наличие трафика на интерфейсе e0/0:
+<pre><code>
+Router#show interfaces e0/0 human-readable  | i rate
+  Queueing strategy: fifo
+  5 minute input rate 3.99 mega-bits/sec , 346 pps 
+  5 minute output rate 0 bits/sec, 0 packets/sec
+</code></pre>
+Как видим, у нас есть почти 4 мегабита входящего потока
+
+А теперь глянем мультикастовую таблицу маршрутизации: 
+<code><pre>
+Router#show ip mroute 
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.0.0.114), 00:14:14/stopped, RP 1.1.1.1, flags: SP
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(172.17.114.1, 239.0.0.114), 00:14:14/00:02:40, flags: PT
+  Incoming interface: Ethernet0/0.114, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(*, 239.0.0.113), 00:14:14/stopped, RP 1.1.1.1, flags: SP
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(172.17.113.1, 239.0.0.113), 00:14:14/00:02:42, flags: PT
+  Incoming interface: Ethernet0/0.113, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(*, 239.0.0.112), 00:14:14/stopped, RP 1.1.1.1, flags: SP
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(172.17.112.1, 239.0.0.112), 00:14:14/00:02:43, flags: PT
+  Incoming interface: Ethernet0/0.112, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(*, 239.0.0.111), 00:14:14/stopped, RP 1.1.1.1, flags: SP
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+(172.17.111.1, 239.0.0.111), 00:14:14/00:02:33, flags: PT
+  Incoming interface: Ethernet0/0.111, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+</pre></code>
+
+Отлично. У нас видны все запущенные мультикастовые группы и IP-адреса источников трафика, в соответствии со скриптом start_mcast.sh
+
+Чтобы остановить вещание мультикаста на сервере, нужно выполнить команду 
+<pre><code>
+root@ubuntu:~# killall tsplay 
+</code></pre>
