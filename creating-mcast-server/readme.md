@@ -239,8 +239,9 @@ Router#show interfaces e0/0 human-readable  | i rate
 Как видим, у нас есть почти 4 мегабита входящего потока
 
 А теперь глянем мультикастовую таблицу маршрутизации: 
+<details>
+   <summary>Router#show ip mroute </summary>
 <code><pre>
-Router#show ip mroute 
 IP Multicast Routing Table
 Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
        L - Local, P - Pruned, R - RP-bit set, F - Register flag,
@@ -283,6 +284,7 @@ Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
   Incoming interface: Ethernet0/0.111, RPF nbr 0.0.0.0
   Outgoing interface list: Null
 </pre></code>
+</details>
 
 Отлично. У нас видны все запущенные мультикастовые группы и IP-адреса источников трафика, в соответствии со скриптом start_mcast.sh
 
