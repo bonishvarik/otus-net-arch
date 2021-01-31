@@ -3,7 +3,7 @@
 Топология сети выглядит следующим образом
 ![Топология сети](https://github.com/bonishvarik/otus-net-arch/raw/main/HW5/HW5_topo.png)
 
-В исходной схеме дано 6 маршрутизаторов (3 Juniper vMX и 3 Cisco IOL), 3 мультикастовых источника и один приемник. Source3 и Receiver находятся в broadcast-среде с двумя роутерами. В сети с Source3 vMX5 должен стать Designated Router, а в сети с Receiver DR должен быть R3. Необходимо настроить RP таким образом, что роутер vMX2 должен стать Rendezvous Point для мультикастовых групп с адресами 239.72/16, а R3 - RP для 239.73/16. Между маршрутизаторами настроен протокол OSPF, все интерфейсы в сторону роутеров в режиме p2p, сети источников или приемников мультикаста анонсируются в OSPF, но находятся в passive-режиме. 
+В исходной схеме дано 6 маршрутизаторов (3 Juniper vMX и 3 Cisco IOL), 3 мультикастовых источника и один приемник. Source3 и Receiver находятся в broadcast-среде с двумя роутерами. В сети с Source3 vMX5 должен стать Designated Router, а в сети с Receiver DR должен быть R3. Необходимо настроить RP таким образом, что роутер vMX2 должен стать Rendezvous Point для мультикастовых групп с адресами 239.72/16, а R3 - RP для 239.73/16. Между маршрутизаторами настроен протокол OSPF: все интерфейсы в сторону соседей имеют тип сети p2p, сети источников или приемников мультикаста анонсируются в OSPF, но сами интерфейсы находятся в passive-режиме. 
 
 Распределение Loopback-адресов:
 | Адрес | Устройство | Интерфейс |
@@ -537,6 +537,7 @@ Neighbor ID     Pri   State           Dead Time   Address         Interface
 ```
 
 Как видно выше, все соседства успешно установлены. Проверим на любом из роутеров, что в таблице маршрутизации есть все сети (loopback, Sources, Receiver):
+
 **root@vMX2> show route 172/8** 
 ```
 
@@ -557,6 +558,7 @@ inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
                     > to 10.0.0.2 via ge-0/0/4.0
 ```
 Проверим наличие всех Loopback-адресов:
+
 **root@vMX2> show route 10.255/16**
 ```
 inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
@@ -575,8 +577,10 @@ inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
 10.255.0.6/32      *[OSPF/10] 01:03:37, metric 12
                     > to 10.0.0.11 via ge-0/0/3.0
 ```
+
 и теперь сеть Reveiver'а: 
-**root@vMX2> show route 192.168.1/24 
+
+**root@vMX2> show route 192.168.1/24** 
 ```
 inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
 + = Active Route, - = Last Active, * = Both
