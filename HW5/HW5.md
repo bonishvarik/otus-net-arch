@@ -589,3 +589,497 @@ inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
                     > to 10.0.0.2 via ge-0/0/4.0
 ```
 Поскольку все префиксы присутствуют в таблице маршрутизации, базовую связность можно считать обеспеченной. Переходим к основной части задания - настройке PIM Sparse Mode
+
+Обмениваться информацией о RP маршрутизаторы будут с помощью протокола bootstrap. Согласно заданию, vMX2 выступает в роли RP для групп с префикса 239.72.0.0/16, а R3 - RP для 239.73.0.0/16. На Cisco и Juniper в дефолтное значение приоритета в bootstrap равно 100, а префикс по умолчанию содержит в себе все мультикастовые адреса: 224.0.0.0/4. Менять данную политику не будем, изменим лишь дефолтное значение приоритета на 180, а на vMX2 и R3 выставим Priority равным 50. 
+
+Конфигурация PIM на Juniper vMX2 выглядит следующим образом: 
+```
+protocols {
+    pim {
+        rp {
+            bootstrap {
+                family inet {
+                    priority 50;  ### настройка приоритета для Bootstrap IPv4
+                }
+            }
+            local {                     
+                address 10.255.0.2; ### адрес кандидата в RP (Loopback-адрес)
+                group-ranges {      ### здесь объявляются префиксы для данной RP
+                    239.72.0.0/16;
+                }
+            }
+        }
+        interface ge-0/0/4.0 {      ### добавление интерфейсов оборудования в PIM
+            mode sparse;
+        }
+        interface ge-0/0/3.0 {
+            mode sparse;
+        }
+    }
+}
+
+```
+
+Конфигурация PIM на Cisco R3:
+```
+### активация мультикастовой маршрутизации
+ip multicast-routing
+
+### access-list для префиксов в данном RP
+ip access-list standard MCAST_239.73.0.0
+ permit 239.73.0.0 0.0.255.255
+ deny   any
+
+### Настройка Lo0-интерфейса в качестве BSR с приоритетом 50 для указанных
+### в rp-candidate ACL групп
+ip pim bsr-candidate Loopback0 0 50
+ip pim rp-candidate Loopback0 group-list MCAST_239.73.0.0
+
+### Добавление интерфейсов оборудования в PIM-домен
+interface Loopback0
+ ip pim sparse-mode
+!
+interface Ethernet0/0
+ ip pim sparse-mode
+!
+interface Ethernet0/1
+ ip pim sparse-mode
+!
+interface Ethernet0/2
+ ip pim sparse-mode
+!
+interface Ethernet0/3
+ ip pim sparse-mode
+```
+
+Аналогичным образом настраивается оставшееся оборудование. Интерфейсы в сторону источников и приемника также добавляются в PIM, но в passive режиме для Cisco. На Juniper такая возможность тоже есть, но в более свежих версиях Junos. 
+<details>
+  <summary>Настройка PIM vMX1</summary>
+
+```
+protocols {
+    pim {
+        rp {
+            bootstrap {
+                family inet {
+                    priority 180;
+                }
+            }
+            local {                     
+                address 10.255.0.1;
+            }
+        }
+        interface ge-0/0/5.111 {
+            mode sparse;
+        }
+        interface ge-0/0/5.112 {
+            mode sparse;
+        }
+        interface ge-0/0/3.0 {
+            mode sparse;
+        }
+        interface ge-0/0/4.0 {
+            mode sparse;
+        }
+    }
+}
+```
+</details>
+
+<details>
+  <summary>Настройка PIM R4</summary>
+
+```
+ip multicast-routing 
+
+ip pim bsr-candidate Loopback0 0 180
+ip pim rp-candidate Loopback0
+
+interface Loopback0
+ ip pim sparse-mode
+!
+interface Ethernet0/0
+ ip pim sparse-mode
+!
+interface Ethernet0/1
+ ip pim sparse-mode
+!
+interface Ethernet0/2
+ ip pim sparse-mode
+!
+interface Ethernet0/3.113
+ ip pim passive
+!
+interface Ethernet0/3.114
+ ip pim passive
+!
+```
+</details>
+
+<details>
+  <summary>Настройка PIM vMX5</summary>
+
+```
+protocols {
+    pim {
+        rp {
+            bootstrap {
+                family inet {
+                    priority 180;
+                }
+            }
+            local {
+                address 10.255.0.5;
+            }
+        }
+        interface ge-0/0/4.0 {
+            mode sparse;
+        }                               
+        interface ge-0/0/5.0 {
+            mode sparse;
+        }
+        interface ge-0/0/3.111 {
+            mode sparse;
+        }
+        interface ge-0/0/3.112 {
+            mode sparse;
+        }
+        interface ge-0/0/2.0 {
+            mode sparse;
+        }
+    }
+}
+```
+</details>
+
+<details>
+  <summary>Настройка PIM R6</summary>
+
+```
+ip multicast-routing 
+
+ip pim bsr-candidate Loopback0 0 180
+ip pim rp-candidate Loopback0
+
+interface Loopback0
+ ip pim sparse-mode
+!
+interface Ethernet0/0
+ ip pim sparse-mode
+!
+interface Ethernet0/1
+ ip pim sparse-mode
+```
+</details>
+
+Убедимся, что PIM-соседства успешно установлены. Для этого достаточно будет проверить vMX1, R4 и vMX5:
+**root@vMX1> show pim neighbors**
+
+```
+B = Bidirectional Capable, G = Generation Identifier
+H = Hello Option Holdtime, L = Hello Option LAN Prune Delay,
+P = Hello Option DR Priority, T = Tracking Bit
+
+Instance: PIM.master
+Interface           IP V Mode        Option       Uptime Neighbor addr
+ge-0/0/3.0           4 2             HPG        00:32:16 10.0.0.1       
+ge-0/0/4.0           4 2             HPLGT      00:32:10 10.0.0.3   
+```
+
+**R4#show ip pim neighbor** 
+
+```
+PIM Neighbor Table
+Mode: B - Bidir Capable, DR - Designated Router, N - Default DR Priority,
+      P - Proxy Capable, S - State Refresh Capable, G - GenID Capable
+Neighbor          Interface                Uptime/Expires    Ver   DR
+Address                                                            Prio/Mode
+10.0.0.13         Ethernet0/0              00:34:47/00:01:23 v2    1 / DR S P G
+10.0.0.10         Ethernet0/1              00:32:39/00:01:29 v2    1 / G
+10.0.0.6          Ethernet0/2              00:34:47/00:01:24 v2    1 / S P G
+```
+**root@vMX5> show pim neighbors**
+```
+B = Bidirectional Capable, G = Generation Identifier
+H = Hello Option Holdtime, L = Hello Option LAN Prune Delay,
+P = Hello Option DR Priority, T = Tracking Bit
+
+Instance: PIM.master
+Interface           IP V Mode        Option       Uptime Neighbor addr
+ge-0/0/4.0           4 2             HPG        00:32:59 10.0.0.4       
+ge-0/0/5.0           4 2             HPG        00:32:59 10.0.0.9   
+```
+
+Все соседства установлены успешно, следующим этапом проверим все доступные RP в нашем PIM-домене:
+<details>
+  <summary>root@vMX1> show pim rps </summary>
+
+```
+Instance: PIM.master
+
+address-family INET
+RP address      Type        Mode   Holdtime Timeout Groups Group prefixes
+10.255.0.1      bootstrap   sparse      150     118      0 224.0.0.0/4
+10.255.0.2      bootstrap   sparse      150     118      0 239.72.0.0/16
+10.255.0.3      bootstrap   sparse      150     118      0 239.73.0.0/16
+10.255.0.4      bootstrap   sparse      150     118      0 224.0.0.0/4
+10.255.0.5      bootstrap   sparse      150     118      0 224.0.0.0/4
+10.255.0.6      bootstrap   sparse      150     118      0 224.0.0.0/4
+10.255.0.1      static      sparse      150    None      0 224.0.0.0/4
+```
+</details>
+
+<details>
+  <summary>R4#show ip pim rp mapping</summary>
+
+```
+PIM Group-to-RP Mappings
+This system is a candidate RP (v2)
+
+Group(s) 224.0.0.0/4
+  RP 10.255.0.6 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:37:00, expires: 00:02:20
+  RP 10.255.0.4 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:36:58, expires: 00:02:20
+  RP 10.255.0.5 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 1, holdtime 150
+         Uptime: 00:34:57, expires: 00:02:23
+  RP 10.255.0.1 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 1, holdtime 150
+         Uptime: 00:34:57, expires: 00:02:21
+Group(s) 239.72.0.0/16
+  RP 10.255.0.2 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 1, holdtime 150
+         Uptime: 00:34:57, expires: 00:02:23
+Group(s) 239.73.0.0/16
+  RP 10.255.0.3 (?), v2
+    Info source: 10.255.0.6 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:36:59, expires: 00:02:23
+```
+</details>
+
+Как видно выше, выводы на Juniper vMX1 и Cisco R4 совпадают: адрес 10.255.0.2 является RP для 239.72.0.0/16, а 10.255.0.3 - RP для 239.73.0.0/16. Теперь попробуем подписаться на группу 239.72.112.1:1234 с нашего приемника. Первым делом убедимся, что vMX1 действительно получает мультикаст от Source1:
+
+<details>
+  <summary>root@vMX1> show route table inet.1</summary>
+
+```
+inet.1: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+224.0.0.0/4        *[Multicast/180] 00:44:47
+                      MultiResolve
+224.0.0.0/24       *[Multicast/180] 00:44:47
+                      MultiDiscard
+232.0.0.0/8        *[Multicast/180] 00:45:24
+                      MultiResolve
+239.72.0.0/16      *[Multicast/180] 00:44:22
+                      MultiResolve
+239.72.111.1,172.17.111.1/64*[PIM/105] 00:10:09
+                      Multicast (IPv4) Composite
+239.72.112.1,172.17.112.1/64*[PIM/105] 00:10:09
+                      Multicast (IPv4) Composite
+239.73.0.0/16      *[Multicast/180] 00:43:36
+                      MultiResolve
+```
+</details>
+Маршруты есть, теперь пробуем увидеть картинку. Для этого в VLC Media Player заходим в Media -> Open Network Stream и в качетве URL вводим адрес группы в следующем формате **udp://@239.72.112.1:1234**
+
+![Тест группы 239.72.112.1](https://github.com/bonishvarik/otus-net-arch/raw/main/HW5/test1.png)
+
+Картинка есть, проверим мультикастовую таблицу маршрутизации на R3:
+
+<details>
+  <summary>R3#sh ip mroute</summary>
+
+```
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.72.112.1), 00:16:00/stopped, RP 10.255.0.2, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.0.0
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse-Dense, 00:01:02/00:01:58
+
+(172.17.112.1, 239.72.112.1), 00:16:00/00:01:38, flags: JT
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.0.0
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse-Dense, 00:01:02/00:01:58
+
+(*, 224.0.1.40), 01:00:49/00:02:11, RP 0.0.0.0, flags: DCL
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Loopback0, Forward/Sparse, 01:00:48/00:02:11
+```
+</details>
+Подписка есть, интерфейс в сторону Receiver находится в OIL. Входящий интерфейс e0/0 - в сторону vMX1. Посмотрим, как ходит трафик через него: 
+<details>
+  <summary>root@vMX1> show pim join 239.72.112.1 detail </summary>
+
+```
+Instance: PIM.master Family: INET
+R = Rendezvous Point Tree, S = Sparse, W = Wildcard
+
+Group: 239.72.112.1
+    Source: *
+    RP: 10.255.0.2
+    Flags: sparse,rptree,wildcard
+    Upstream interface: ge-0/0/4.0            
+    Downstream neighbors:
+        Interface: ge-0/0/3.0             
+
+Group: 239.72.112.1
+    Source: 172.17.112.1
+    Flags: sparse,spt
+    Upstream interface: ge-0/0/5.112          
+    Downstream neighbors:
+        Interface: ge-0/0/3.0        
+```
+</details>
+
+Здесь видно, что vMX2 хоть и является RP для данной мультикастовой группы, трафик с vMX1 напрямую пошел в сторону получателя через интерфейс ge-0/0/3, чтобы лишний раз не забивать сеть трафиком. Это сработал SPT Switchover.
+
+Возьмем теперь группу из Source3 - 239.73.111.1:1234
+
+<details>
+  <summary>R3#show ip mroute</summary>
+
+```
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.73.111.1), 00:06:06/stopped, RP 10.255.0.3, flags: SJC
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse-Dense, 00:00:28/00:02:36
+
+(172.18.111.1, 239.73.111.1), 00:02:22/00:00:37, flags: JT
+  Incoming interface: Ethernet0/3, RPF nbr 10.0.0.5
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse-Dense, 00:00:28/00:02:36
+
+(*, 224.0.1.40), 01:27:27/00:02:37, RP 0.0.0.0, flags: DCL
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Loopback0, Forward/Sparse, 01:27:26/00:02:37
+```
+</details>
+Incoming interface в данном случае e0/1 - интерфейс в сторону vMX5. Проверим vMX5: 
+<details>
+  <summary>root@vMX5> show route table inet.1 </summary>
+
+```
+inet.1: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+224.0.0.0/4        *[Multicast/180] 01:27:09
+                      MultiResolve
+224.0.0.0/24       *[Multicast/180] 01:27:09
+                      MultiDiscard
+232.0.0.0/8        *[Multicast/180] 01:27:45
+                      MultiResolve
+239.72.0.0/16      *[Multicast/180] 01:26:11
+                      MultiResolve
+239.73.0.0/16      *[Multicast/180] 01:26:11
+                      MultiResolve
+239.73.111.1,172.18.111.1/64*[PIM/105] 00:05:45
+                      Multicast (IPv4) Composite
+239.73.112.1,172.18.112.1/64*[PIM/105] 00:05:45
+                      Multicast (IPv4) Composite
+```
+</details>
+
+<details>
+  <summary>root@vMX5>root@vMX5> show pim join 239.73.111.1 detail </summary>
+
+```
+Instance: PIM.master Family: INET
+R = Rendezvous Point Tree, S = Sparse, W = Wildcard
+
+Group: 239.73.111.1
+    Source: 172.18.111.1
+    Flags: sparse,spt
+    Upstream interface: ge-0/0/3.111          
+    Downstream neighbors:
+        Interface: ge-0/0/4.0    
+```
+</details>
+
+Судя по выводу консоли, мультикаст успешно "побежал" в сторону Receiver.
+Напоследок, проверим наличие мультикастовых маршрутов на R4:
+
+<details>
+  <summary>R4#show ip mroute</summary>
+
+```
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.72.114.1), 00:00:58/stopped, RP 10.255.0.2, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.0.10
+  Outgoing interface list: Null
+
+(172.17.114.1, 239.72.114.1), 00:00:58/00:02:01, flags: PFT
+  Incoming interface: Ethernet0/3.114, RPF nbr 0.0.0.0, Registering
+  Outgoing interface list: Null
+
+(*, 239.72.113.1), 00:00:58/stopped, RP 10.255.0.2, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.0.10
+  Outgoing interface list: Null
+
+(172.17.113.1, 239.72.113.1), 00:00:58/00:02:01, flags: PFT
+  Incoming interface: Ethernet0/3.113, RPF nbr 0.0.0.0, Registering
+  Outgoing interface list: Null
+
+(*, 224.0.1.40), 00:29:54/00:02:08, RP 0.0.0.0, flags: DCL
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Loopback0, Forward/Sparse, 00:29:53/00:02:08
+```
+</details>
+
+Маршруты есть. На даннм этапе задание можно считать полностью выполненным. 
