@@ -579,7 +579,7 @@ inet.0: 23 destinations, 23 routes (23 active, 0 holddown, 0 hidden)
 Поскольку все префиксы присутствуют в таблице маршрутизации, базовую связность можно считать обеспеченной. Переходим к основной части задания - настройке PIM Sparse Mode
 
 ------------------------------------------------------------------------------------------------------
-Обмениваться информацией о RP маршрутизаторы будут с помощью протокола bootstrap. Согласно заданию, vMX2 выступает в роли RP для групп с префикса 239.72.0.0/16, а R3 - RP для 239.73.0.0/16. На Cisco и Juniper в дефолтное значение приоритета в bootstrap равно 100, а префикс по умолчанию содержит в себе все мультикастовые адреса: 224.0.0.0/4. Менять данную политику не будем, изменим лишь дефолтное значение приоритета на 180, а на vMX2 и R3 выставим Priority равным 50. 
+Обмениваться информацией о RP маршрутизаторы будут с помощью протокола bootstrap. Согласно заданию, vMX2 выступает в роли RP для групп с префикса 239.72.0.0/16, а R3 - RP для 239.73.0.0/16. На Cisco и Juniper в дефолтное значение приоритета в bootstrap равно 100, а префикс по умолчанию содержит в себе все мультикастовые адреса: 224.0.0.0/4. Менять данную политику не будем, изменим лишь дефолтное значение приоритета на 30, а на vMX2 и R3 выставим Priority равным 180. 
 
 Конфигурация PIM на Juniper vMX2 выглядит следующим образом: 
 ```
@@ -588,7 +588,7 @@ protocols {
         rp {
             bootstrap {
                 family inet {
-                    priority 50;  ### настройка приоритета для Bootstrap IPv4
+                    priority 180;  ### настройка приоритета для Bootstrap IPv4
                 }
             }
             local {                     
@@ -621,8 +621,8 @@ ip access-list standard MCAST_239.73.0.0
 
 ### Настройка Lo0-интерфейса в качестве BSR с приоритетом 50 для указанных
 ### в rp-candidate ACL групп
-ip pim bsr-candidate Loopback0 0 50
-ip pim rp-candidate Loopback0 group-list MCAST_239.73.0.0 priority 100
+ip pim bsr-candidate Loopback0 0 180
+ip pim rp-candidate Loopback0 group-list MCAST_239.73.0.0 priority 180
 
 ### Добавление интерфейсов оборудования в PIM-домен
 interface Loopback0
@@ -651,7 +651,7 @@ protocols {
         rp {
             bootstrap {
                 family inet {
-                    priority 180;
+                    priority 30;
                 }
             }
             local {                     
@@ -681,7 +681,7 @@ protocols {
 ```
 ip multicast-routing 
 
-ip pim bsr-candidate Loopback0 0 180
+ip pim bsr-candidate Loopback0 0 30
 ip pim rp-candidate Loopback0
 
 interface Loopback0
@@ -714,7 +714,7 @@ protocols {
         rp {
             bootstrap {
                 family inet {
-                    priority 180;
+                    priority 30;
                 }
             }
             local {
@@ -747,7 +747,7 @@ protocols {
 ```
 ip multicast-routing 
 
-ip pim bsr-candidate Loopback0 0 180
+ip pim bsr-candidate Loopback0 0 30
 ip pim rp-candidate Loopback0
 
 interface Loopback0
